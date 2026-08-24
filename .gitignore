@@ -11,8 +11,9 @@ node_modules/
 .next/
 out/
 
-# Runtime data
-data/
+# Runtime data. Anchored to the repo root so it doesn't swallow the
+# app/data source package.
+/data/
 
 # Env
 .env
