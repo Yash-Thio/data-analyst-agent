@@ -1,0 +1,16 @@
+# Runtime dependencies, mirroring [project.dependencies] in pyproject.toml.
+# Render's native Python runtime needs this file for detection; the app package
+# itself is imported from the working directory, so no editable install.
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain-anthropic>=0.2.0
+duckdb>=1.1.0
+pandas>=2.2.0
+numpy>=2.1.0
+python-multipart>=0.0.12
+sse-starlette>=2.1.0

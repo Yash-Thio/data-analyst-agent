@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: data-analyst-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Single worker is required: sessions, SSE queues and the running analysis
+    # task all live in the in-process SessionManager singleton.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      # Free instances have no persistent disk; uploads live only until restart.
+      - key: DATA_DIR
+        value: /tmp/data
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CORS_ORIGIN_REGEX
+        sync: false
+      - key: MAX_UPLOAD_MB
+        value: "15"

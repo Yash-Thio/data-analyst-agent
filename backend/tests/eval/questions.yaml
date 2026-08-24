@@ -1,0 +1,187 @@
+# Natural-language evaluation bank.
+#
+# Offline tests assert the bank is well-formed and that every referenced
+# dataset/column actually exists. The live suite (`pytest -m live`) runs each
+# question through the real agent and asserts the properties under `expect`.
+#
+# Expectations are deliberately property-based, never exact strings: the point
+# is that the agent produces grounded, non-empty, correctly-scoped evidence.
+
+datasets:
+  sales:
+    file: sample-data/sales.csv
+    note: Tidy long format. The only shape the original implementation supported.
+  financial:
+    file: sample-data/04-01-Financial Sample Data.csv
+    note: >-
+      Currency-formatted measures, padded headers, mixed-case country values and
+      M/D/YYYY dates that DuckDB used to misparse as D/M/YYYY.
+  unemployment:
+    file: sample-data/2025-01-01 to 2026-06-01 Unemployment Rate by Metropolitan Statistical Area (Percent).csv
+    note: >-
+      Wide layout - 18 monthly date columns, an all-null month, and an
+      alphanumeric Series ID that must never be treated as a measure.
+
+questions:
+  # --- sales.csv -----------------------------------------------------------
+  - id: sales-root-cause
+    dataset: sales
+    question: Why did revenue drop in Q3 compared to Q2?
+    expect:
+      intents: [root_cause, comparison, trend]
+      min_findings: 1
+      columns_any: [revenue, date, region]
+
+  - id: sales-ranking
+    dataset: sales
+    question: Which region produced the most revenue overall?
+    expect:
+      intents: [ranking, aggregate, comparison]
+      min_findings: 1
+      columns_any: [region, revenue]
+
+  - id: sales-aggregate
+    dataset: sales
+    question: What is the total revenue in the dataset?
+    expect:
+      intents: [aggregate, summary, lookup]
+      min_findings: 1
+      columns_any: [revenue]
+
+  - id: sales-trend
+    dataset: sales
+    question: Show me the monthly revenue trend.
+    expect:
+      intents: [trend, aggregate]
+      min_findings: 1
+      columns_any: [date, revenue]
+
+  # --- 04-01-Financial Sample Data.csv -------------------------------------
+  - id: fin-date-spread
+    dataset: financial
+    question: How did total sales change month over month during 2014?
+    expect:
+      intents: [trend, comparison, aggregate]
+      min_findings: 1
+      columns_any: [Date, Sales]
+      # Regression guard for the D/M/YYYY misparse that collapsed every row
+      # into January. A correct run must span more than two distinct months.
+      min_distinct_months: 3
+
+  - id: fin-country-profit
+    dataset: financial
+    question: Which country was the most profitable in 2014?
+    expect:
+      intents: [ranking, comparison, aggregate]
+      min_findings: 1
+      columns_any: [Country, Profit]
+      # CANADA / "   germany   " must not split into separate groups.
+      requires_normalized_grouping: true
+
+  - id: fin-segment-breakdown
+    dataset: financial
+    question: Break down gross sales by segment and discount band.
+    expect:
+      intents: [distribution, aggregate, comparison]
+      min_findings: 1
+      columns_any: [Segment, Discount Band, Gross Sales]
+
+  - id: fin-discounts
+    dataset: financial
+    question: What is the total value of discounts given, by product?
+    expect:
+      intents: [aggregate, ranking, distribution]
+      min_findings: 1
+      # Discounts is a currency column that the old profiler called categorical.
+      columns_any: [Discounts, Product]
+
+  - id: fin-units-vs-profit
+    dataset: financial
+    question: Do products with more units sold also generate more profit?
+    expect:
+      intents: [correlation, comparison, distribution]
+      min_findings: 1
+      columns_any: [Units Sold, Profit, Product]
+
+  - id: fin-no-date-needed
+    dataset: financial
+    question: How many distinct products are there and what are they?
+    expect:
+      intents: [lookup, summary, aggregate, distribution]
+      min_findings: 1
+      columns_any: [Product]
+      # Purely non-temporal: the old template tools could not express this.
+      forbids_date_requirement: true
+
+  # --- unemployment (wide) -------------------------------------------------
+  - id: unemp-average-by-region
+    dataset: unemployment
+    question: What is the average unemployment rate by region?
+    expect:
+      intents: [aggregate, ranking, distribution]
+      min_findings: 1
+      columns_any: [Region Name, value]
+      requires_long_view: true
+
+  - id: unemp-highest
+    dataset: unemployment
+    question: Which metropolitan area had the highest unemployment rate in June 2026?
+    expect:
+      intents: [ranking, lookup, comparison]
+      min_findings: 1
+      columns_any: [Region Name, value, period]
+      requires_long_view: true
+
+  - id: unemp-trend
+    dataset: unemployment
+    question: How has the unemployment rate in Akron, OH changed over time?
+    expect:
+      intents: [trend, comparison]
+      min_findings: 1
+      columns_any: [Region Name, value, period]
+      requires_long_view: true
+
+  - id: unemp-improved-most
+    dataset: unemployment
+    question: Which regions improved the most between January 2025 and June 2026?
+    expect:
+      intents: [ranking, comparison, root_cause]
+      min_findings: 1
+      columns_any: [Region Name, value, period]
+      requires_long_view: true
+
+  - id: unemp-series-id-not-a-metric
+    dataset: unemployment
+    question: Summarise this dataset for me.
+    expect:
+      intents: [summary, aggregate, distribution]
+      min_findings: 1
+      # Series ID (ABIL148UR) must never be summed as if it were a measure.
+      forbids_measures: [Series ID, Region Code]
+
+  - id: unemp-null-month
+    dataset: unemployment
+    question: Are there any months with missing data?
+    expect:
+      intents: [summary, distribution, lookup, aggregate]
+      min_findings: 1
+      columns_any: [period, value]
+
+  # --- unanswerable / out of scope ----------------------------------------
+  - id: sales-unanswerable
+    dataset: sales
+    question: What was our marketing spend on Facebook ads last year?
+    expect:
+      answerable: false
+
+  - id: unemp-unanswerable
+    dataset: unemployment
+    question: What is the median household income in each of these areas?
+    expect:
+      answerable: false
+
+  - id: fin-ambiguous
+    dataset: financial
+    question: Is it good?
+    expect:
+      answerable: false

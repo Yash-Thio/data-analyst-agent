@@ -1,18 +1,23 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AgentActivityFeed } from "@/components/AgentActivityFeed";
 import { AnalysisReport } from "@/components/AnalysisReport";
 import { ChartPanel } from "@/components/ChartPanel";
+import { DatasetSummary } from "@/components/DatasetSummary";
 import { EvidenceExplorer } from "@/components/EvidenceExplorer";
 import { FileUpload } from "@/components/FileUpload";
 import { QuestionInput } from "@/components/QuestionInput";
 import { ReasoningTrace } from "@/components/ReasoningTrace";
 import {
   askQuestion,
+  cancelAnalysis,
   createSession,
   getSession,
+  pingHealth,
+  SessionGoneError,
   streamSession,
+  waitForBackend,
   type AgentEvent,
   type ChartSpec,
   type Claim,
@@ -20,6 +25,15 @@ import {
   type Evidence,
   type Explanation,
 } from "@/lib/api";
+
+type BackendStatus = "checking" | "waking" | "ready" | "unreachable";
+
+/**
+ * A free-tier instance idles out after 15 minutes without an *inbound*
+ * request. Server-sent heartbeats don't count, so a long analysis needs the
+ * client to check in periodically to stay alive.
+ */
+const KEEPALIVE_MS = 5 * 60 * 1000;
 
 export default function HomePage() {
   const [datasetId, setDatasetId] = useState<string | null>(null);
@@ -32,6 +46,44 @@ export default function HomePage() {
   const [selectedEvidence, setSelectedEvidence] = useState<Evidence | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (await pingHealth()) {
+        if (!cancelled) setBackendStatus("ready");
+        return;
+      }
+      if (!cancelled) setBackendStatus("waking");
+      const ok = await waitForBackend();
+      if (!cancelled) setBackendStatus(ok ? "ready" : "unreachable");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!running || !sessionId) return;
+    const timer = setInterval(() => {
+      void getSession(sessionId).catch(() => {});
+    }, KEEPALIVE_MS);
+    return () => clearInterval(timer);
+  }, [running, sessionId]);
+
+  const handleSessionGone = useCallback(() => {
+    setDatasetId(null);
+    setProfile(null);
+    setFilename(null);
+    setSessionId(null);
+    setRunning(false);
+    setEvents([]);
+    setCharts([]);
+    setExplanation(null);
+    setSelectedEvidence(null);
+    setError("The analysis server restarted and lost the uploaded data. Upload the CSV again to continue.");
+  }, []);
 
   const onUploaded = useCallback(
     async (id: string, p: DatasetProfile, name: string) => {
@@ -43,10 +95,15 @@ export default function HomePage() {
       setEvents([]);
       setSelectedEvidence(null);
       setError(null);
-      const session = await createSession(id);
-      setSessionId(session.session_id);
+      try {
+        const session = await createSession(id);
+        setSessionId(session.session_id);
+      } catch (e) {
+        if (e instanceof SessionGoneError) handleSessionGone();
+        else setError(e instanceof Error ? e.message : "Failed to create session");
+      }
     },
-    []
+    [handleSessionGone]
   );
 
   const onAsk = useCallback(
@@ -71,17 +128,25 @@ export default function HomePage() {
             if (event.type === "chart" && event.spec) {
               setCharts((prev) => [...prev, event.spec as ChartSpec]);
             }
+            // `step_error` is a step that failed and was recorded; the run
+            // carries on and reports what it could establish.
             if (event.type === "error") {
               setError(event.message || "Analysis failed");
               setRunning(false);
               es.close();
             }
             if (event.type === "done") {
-              void getSession(session.session_id).then((s) => {
-                if (s.explanation) setExplanation(s.explanation);
-                if (s.charts) setCharts(s.charts);
-                setRunning(false);
-              });
+              void getSession(session.session_id)
+                .then((s) => {
+                  if (s.explanation) setExplanation(s.explanation);
+                  if (s.charts) setCharts(s.charts);
+                  setRunning(false);
+                })
+                .catch((e) => {
+                  if (e instanceof SessionGoneError) handleSessionGone();
+                  else setError("Could not load the finished report");
+                  setRunning(false);
+                });
               es.close();
             }
           },
@@ -93,11 +158,15 @@ export default function HomePage() {
 
         await askQuestion(session.session_id, question);
       } catch (e) {
+        if (e instanceof SessionGoneError) {
+          handleSessionGone();
+          return;
+        }
         setError(e instanceof Error ? e.message : "Failed to start");
         setRunning(false);
       }
     },
-    [datasetId]
+    [datasetId, handleSessionGone]
   );
 
   function handleSelectClaim(claim: Claim) {
@@ -118,32 +187,39 @@ export default function HomePage() {
         </p>
       </header>
 
+      {backendStatus === "waking" && (
+        <p className="mb-6 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          Waking up the analysis server. This takes up to a minute on the first request.
+        </p>
+      )}
+
+      {backendStatus === "unreachable" && (
+        <p className="mb-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+          The analysis server is not responding. Reload the page to try again.
+        </p>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-4">
           <FileUpload onUploaded={onUploaded} />
 
-          {profile && (
-            <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-              <p className="text-sm font-medium">
-                {filename} · {profile.row_count} rows · {profile.column_count} columns
-              </p>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {profile.columns.map((c) => (
-                  <span
-                    key={c.name}
-                    className="rounded bg-zinc-100 px-2 py-0.5 text-xs dark:bg-zinc-800"
-                    title={c.role}
-                  >
-                    {c.name}
-                    <span className="ml-1 text-zinc-400">{c.role}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          {profile && filename && <DatasetSummary filename={filename} profile={profile} />}
 
           {datasetId && (
             <QuestionInput disabled={running || !datasetId} onSubmit={onAsk} />
+          )}
+
+          {running && sessionId && (
+            <button
+              type="button"
+              onClick={() => {
+                void cancelAnalysis(sessionId);
+                setRunning(false);
+              }}
+              className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:hover:text-zinc-300"
+            >
+              Stop this analysis
+            </button>
           )}
 
           {error && (

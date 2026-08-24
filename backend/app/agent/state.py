@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 from langgraph.graph.message import add_messages
 
@@ -11,15 +11,20 @@ from app.agent.models.explanation import (
 )
 
 
-class Finding(TypedDict):
+class Finding(TypedDict, total=False):
     id: str
     step_id: str
     goal: str
-    tool: str
     sql: str
     result_rows: list[dict]
     result_summary: str
     computed_metrics: dict[str, float | str | int | None]
+    row_count: int
+    truncated: bool
+    # "ok" | "empty" | "failed" - failures stay in the record so the report can
+    # say what could not be established.
+    status: str
+    attempts: int
 
 
 class AgentEvent(TypedDict, total=False):
@@ -35,10 +40,13 @@ class AgentEvent(TypedDict, total=False):
     finding_id: str
     text: str
     evidence_ids: list[str]
+    confidence: str
     content: str
     session_id: str
-    explanation_id: str
     limitations: list[str]
+    degraded: bool
+    recoverable: bool
+    attempt: int
 
 
 class AgentState(TypedDict, total=False):
@@ -50,12 +58,14 @@ class AgentState(TypedDict, total=False):
     interpretation: QuestionInterpretation
     plan: list[AnalysisStep]
     current_step_index: int
+    replans: int
     findings: list[Finding]
     charts: list[ChartSpec]
     explanation: Explanation
     reasoning_trace: list[ReasoningStep]
     events: list[AgentEvent]
     evaluation: dict
+    node_errors: list[str]
     messages: Annotated[list, add_messages]
-    status: Literal["running", "done", "error"]
+    status: Literal["running", "done", "degraded", "error"]
     error: str

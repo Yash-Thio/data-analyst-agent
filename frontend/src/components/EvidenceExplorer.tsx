@@ -27,6 +27,17 @@ export function EvidenceExplorer({ evidence }: Props) {
         <span className="text-xs text-zinc-500">Finding {evidence.finding_id}</span>
       </div>
 
+      {evidence.row_count === 0 ? (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          This query returned no rows, so it cannot support a conclusion.
+        </p>
+      ) : (
+        <p className="text-xs text-zinc-500">
+          {evidence.row_count.toLocaleString()} rows
+          {evidence.truncated && " · preview truncated to the first rows"}
+        </p>
+      )}
+
       <div>
         <p className="mb-1 text-xs font-medium uppercase text-zinc-500">SQL</p>
         <pre className="overflow-x-auto rounded-lg bg-zinc-900 p-3 text-xs text-emerald-300">

@@ -24,6 +24,10 @@ class Settings(BaseSettings):
 
     data_dir: Path = _DEFAULT_DATA
     cors_origins: str = "http://localhost:3000"
+    # Preview deployments get a fresh hostname per commit, so they need a
+    # pattern rather than an entry in cors_origins.
+    cors_origin_regex: str = ""
+    max_upload_mb: int = 15
 
     @property
     def uploads_dir(self) -> Path:

@@ -1,15 +1,87 @@
-from typing import Any, Literal
+"""Structured contracts between the agent's nodes and the UI.
+
+Models the LLM fills in are constrained for strict JSON-schema providers
+(Groq in particular): every property required, no unions, no free-form objects.
+Models assembled in Python are free to be richer.
+"""
+
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+Intent = Literal[
+    "aggregate",
+    "comparison",
+    "trend",
+    "ranking",
+    "distribution",
+    "correlation",
+    "root_cause",
+    "lookup",
+    "summary",
+]
 
-class Evidence(BaseModel):
+Confidence = Literal["high", "medium", "low"]
+
+
+# --------------------------------------------------------------------------
+# LLM-facing models (strict schema)
+# --------------------------------------------------------------------------
+
+
+class QuestionInterpretation(BaseModel):
+    """What the user is actually asking of *this* dataset.
+
+    `answerable` is the important field: a question about data that is not in
+    the CSV should produce a clarification, never an invented analysis.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    intent: Intent
+    metric: str
+    metric_columns: list[str]
+    dimensions: list[str]
+    time_scope: str
+    comparison_scope: str
+    answerable: bool
+    clarification: str
+    notes: str
+
+
+class AnalysisStep(BaseModel):
+    """One query. The planner writes SQL directly - there are no templates."""
+
+    model_config = ConfigDict(extra="forbid")
+
     id: str
-    finding_id: str
+    goal: str
     sql: str
-    result_preview: list[dict]
-    metrics: dict[str, float | str | int | None]
-    chart_id: str | None = None
+    expected_shape: Literal["scalar", "series", "table"]
+    rationale: str
+
+
+class AnalysisPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    steps: list[AnalysisStep]
+
+
+class SqlFix(BaseModel):
+    """A repaired query plus what was wrong with the previous attempt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sql: str
+    explanation: str
+
+
+class EvaluationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sufficient: bool
+    reason: str
+    follow_up_goals: list[str]
 
 
 class Claim(BaseModel):
@@ -18,14 +90,41 @@ class Claim(BaseModel):
     id: str
     text: str
     evidence_ids: list[str]
-    confidence: Literal["high", "medium", "low"]
+    confidence: Confidence
 
     @field_validator("evidence_ids")
     @classmethod
-    def non_empty_evidence(cls, v: list[str]) -> list[str]:
-        if not v:
+    def non_empty_evidence(cls, value: list[str]) -> list[str]:
+        if not value:
             raise ValueError("Claim must reference at least one evidence record")
-        return v
+        return value
+
+
+class ExplanationDraft(BaseModel):
+    """The narrative half of the report. Evidence is assembled in Python."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str
+    claims: list[Claim]
+    limitations: list[str]
+    markdown: str
+
+
+# --------------------------------------------------------------------------
+# Python-assembled models
+# --------------------------------------------------------------------------
+
+
+class Evidence(BaseModel):
+    id: str
+    finding_id: str
+    sql: str
+    result_preview: list[dict]
+    metrics: dict[str, float | str | int | None]
+    row_count: int = 0
+    truncated: bool = False
+    chart_id: str | None = None
 
 
 class ReasoningStep(BaseModel):
@@ -35,117 +134,13 @@ class ReasoningStep(BaseModel):
     output_summary: str
 
 
-class ExplanationDraft(BaseModel):
-    """LLM-generated portion of the explanation."""
+class ClaimCheck(BaseModel):
+    """Result of checking a claim's numbers against its own evidence."""
 
-    model_config = ConfigDict(extra="forbid")
-
-    summary: str
-    claims: list[Claim]
-    limitations: list[str]
-    markdown: str
-
-
-class Explanation(BaseModel):
-    summary: str
-    claims: list[Claim]
-    evidence: list[Evidence]
-    reasoning_trace: list[ReasoningStep]
-    limitations: list[str]
-    markdown: str
-
-    @model_validator(mode="after")
-    def validate_claim_evidence_links(self) -> "Explanation":
-        evidence_ids = {e.id for e in self.evidence}
-        for claim in self.claims:
-            for eid in claim.evidence_ids:
-                if eid not in evidence_ids:
-                    raise ValueError(f"Claim {claim.id} references unknown evidence {eid}")
-        return self
-
-
-class QuestionInterpretation(BaseModel):
-    """All fields required for Groq/OpenAI strict JSON schema compatibility."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    metric: str
-    metric_column: str | None
-    period: str
-    comparison_period: str
-    intent: Literal["root_cause", "trend", "comparison", "summary", "other"]
-    dimensions_of_interest: list[str]
-    notes: str
-
-
-class StepParams(BaseModel):
-    """Explicit tool args — free-form dicts break Groq strict structured output.
-
-    All fields are required for strict JSON schema. Unused string fields should be "".
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    metric_col: str
-    date_col: str
-    period_a_label: str
-    period_a_filter: str
-    period_b_label: str
-    period_b_filter: str
-    group_by: str
-    dimension_col: str
-    limit: int
-    sql: str
-
-    def to_tool_kwargs(self, tool: str) -> dict[str, Any]:
-        if tool == "run_sql":
-            return {"sql": self.sql}
-        if tool == "compare_periods":
-            kwargs: dict[str, Any] = {
-                "metric_col": self.metric_col,
-                "date_col": self.date_col,
-                "period_a_label": self.period_a_label,
-                "period_a_filter": self.period_a_filter,
-                "period_b_label": self.period_b_label,
-                "period_b_filter": self.period_b_filter,
-            }
-            if self.group_by.strip():
-                kwargs["group_by"] = self.group_by
-            return kwargs
-        if tool == "top_contributors":
-            return {
-                "metric_col": self.metric_col,
-                "date_col": self.date_col,
-                "dimension_col": self.dimension_col,
-                "period_a_filter": self.period_a_filter,
-                "period_b_filter": self.period_b_filter,
-                "period_a_label": self.period_a_label or "period_a",
-                "period_b_label": self.period_b_label or "period_b",
-                "limit": self.limit if self.limit > 0 else 10,
-            }
-        raise ValueError(f"Unknown tool: {tool}")
-
-
-class AnalysisStep(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    goal: str
-    tool: Literal["compare_periods", "top_contributors", "run_sql"]
-    params: StepParams
-
-
-class AnalysisPlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    steps: list[AnalysisStep]
-
-
-class EvaluationResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    sufficient: bool
-    reason: str
+    claim_id: str
+    status: Literal["verified", "unverified", "rejected"]
+    detail: str
+    unmatched_numbers: list[float] = []
 
 
 class ChartSpec(BaseModel):
@@ -158,8 +153,21 @@ class ChartSpec(BaseModel):
     y_key: str
 
 
-class ExplanationDraftInput(BaseModel):
+class Explanation(BaseModel):
     summary: str
     claims: list[Claim]
+    evidence: list[Evidence]
+    reasoning_trace: list[ReasoningStep]
     limitations: list[str]
     markdown: str
+    checks: list[ClaimCheck] = []
+    degraded: bool = False
+
+    @model_validator(mode="after")
+    def validate_claim_evidence_links(self) -> "Explanation":
+        evidence_ids = {e.id for e in self.evidence}
+        for claim in self.claims:
+            for eid in claim.evidence_ids:
+                if eid not in evidence_ids:
+                    raise ValueError(f"Claim {claim.id} references unknown evidence {eid}")
+        return self
