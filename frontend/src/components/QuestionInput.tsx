@@ -8,7 +8,7 @@ type Props = {
 };
 
 export function QuestionInput({ disabled, onSubmit }: Props) {
-  const [question, setQuestion] = useState("Why did revenue drop in Q3?");
+  const [question, setQuestion] = useState("");
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
