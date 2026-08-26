@@ -176,84 +176,126 @@ export default function HomePage() {
     setSelectedEvidence(ev);
   }
 
+  const hasWorkspace = Boolean(profile && filename && datasetId);
+  const hasResults = Boolean(explanation) || charts.length > 0;
+
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Autonomous Data Analyst
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Upload a CSV, ask a question, and get an explainable, evidence-backed answer.
-        </p>
-      </header>
-
-      {backendStatus === "waking" && (
-        <p className="mb-6 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-          Waking up the analysis server. This takes up to a minute on the first request.
-        </p>
-      )}
-
-      {backendStatus === "unreachable" && (
-        <p className="mb-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
-          The analysis server is not responding. Reload the page to try again.
-        </p>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="space-y-4">
-          <FileUpload onUploaded={onUploaded} />
-
-          {profile && filename && <DatasetSummary filename={filename} profile={profile} />}
-
-          {datasetId && (
-            <QuestionInput disabled={running || !datasetId} onSubmit={onAsk} />
-          )}
-
-          {running && sessionId && (
-            <button
-              type="button"
-              onClick={() => {
-                void cancelAnalysis(sessionId);
-                setRunning(false);
-              }}
-              className="text-xs text-zinc-500 underline hover:text-zinc-700 dark:hover:text-zinc-300"
-            >
-              Stop this analysis
-            </button>
-          )}
-
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
-              {error}
+    <div className="min-h-screen">
+      <header className="chrome sticky top-0 z-20">
+        <div className="mx-auto flex max-w-5xl items-start justify-between gap-4 px-6 py-4 sm:px-8">
+          <div>
+            <h1 className="display-title">Autonomous Data Analyst</h1>
+            <p className="mt-1 text-sm text-[var(--label-secondary)]">
+              Upload a CSV, ask a question, and get an explainable, evidence-backed answer.
+            </p>
+          </div>
+          {backendStatus === "waking" && (
+            <p className="status-pill banner-warn shrink-0">
+              Waking up the analysis server. This takes up to a minute on the first request.
             </p>
           )}
+          {backendStatus === "unreachable" && (
+            <p className="status-pill banner-error shrink-0">
+              The analysis server is not responding. Reload the page to try again.
+            </p>
+          )}
+        </div>
+      </header>
 
-          <AgentActivityFeed events={events} />
-          {explanation && <ReasoningTrace steps={explanation.reasoning_trace} />}
-        </section>
+      <main className="mx-auto px-6 py-10 sm:px-8">
+        {!hasWorkspace && (
+          <div className="flex min-h-[calc(100vh-8.5rem)] items-center justify-center">
+            <FileUpload onUploaded={onUploaded} />
+          </div>
+        )}
 
-        <section className="space-y-4">
-          {running && !explanation && (
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-200">
-              Agent is analyzing…
+        {hasWorkspace && profile && filename && (
+          <div className="mx-auto max-w-3xl space-y-10">
+            <div className="grouped">
+              <div className="grouped-row">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <p className="section-title">Dataset</p>
+                  <FileUpload compact onUploaded={onUploaded} />
+                </div>
+                <DatasetSummary filename={filename} profile={profile} />
+              </div>
+              <div className="grouped-row">
+                <p className="section-title mb-3">Question</p>
+                <QuestionInput disabled={running || !datasetId} onSubmit={onAsk} />
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  {running && sessionId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void cancelAnalysis(sessionId);
+                        setRunning(false);
+                      }}
+                      className="btn btn-secondary"
+                    >
+                      Stop this analysis
+                    </button>
+                  )}
+                  {running && !explanation && (
+                    <p className="banner banner-info">Agent is analyzing…</p>
+                  )}
+                </div>
+                {error && <p className="banner banner-error mt-3">{error}</p>}
+              </div>
             </div>
-          )}
 
-          {explanation && (
-            <>
-              <AnalysisReport
-                explanation={explanation}
-                selectedEvidenceId={selectedEvidence?.id ?? null}
-                onSelectClaim={handleSelectClaim}
-                onSelectEvidence={setSelectedEvidence}
-              />
-              <EvidenceExplorer evidence={selectedEvidence} />
-            </>
-          )}
+            {events.length > 0 && (
+              <section className="process space-y-3">
+                <h2 className="section-title">Agent activity</h2>
+                <AgentActivityFeed events={events} />
+              </section>
+            )}
+          </div>
+        )}
 
-          <ChartPanel charts={charts} />
-        </section>
-      </div>
-    </main>
+        {hasWorkspace && hasResults && (
+          <div className="enter mx-auto mt-14 max-w-5xl space-y-12">
+            {explanation && (
+              <div
+                className={
+                  selectedEvidence
+                    ? "grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start"
+                    : "space-y-4"
+                }
+              >
+                <section className="space-y-4">
+                  <AnalysisReport
+                    explanation={explanation}
+                    selectedEvidenceId={selectedEvidence?.id ?? null}
+                    onSelectClaim={handleSelectClaim}
+                    onSelectEvidence={setSelectedEvidence}
+                  />
+                  {!selectedEvidence && (
+                    <p className="hint">
+                      Click a claim or evidence ID to inspect SQL and result rows.
+                    </p>
+                  )}
+                </section>
+                {selectedEvidence && (
+                  <aside className="surface p-5 sm:p-6">
+                    <EvidenceExplorer evidence={selectedEvidence} />
+                  </aside>
+                )}
+              </div>
+            )}
+
+            <ChartPanel charts={charts} />
+
+            {explanation && explanation.reasoning_trace.length > 0 && (
+              <details open className="process border-t border-[var(--separator)] pt-8">
+                <summary className="section-title cursor-pointer">Reasoning trace</summary>
+                <div className="mt-4">
+                  <ReasoningTrace steps={explanation.reasoning_trace} />
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

@@ -33,42 +33,48 @@ function isRenderable(chart: ChartSpec): boolean {
   );
 }
 
+const stroke = "var(--accent)";
+const fill = "var(--accent-fill)";
+const tick = { fontSize: 11, fill: "var(--label-secondary)" };
+
 export function ChartPanel({ charts }: Props) {
   const renderable = (charts ?? []).filter(isRenderable);
   if (renderable.length === 0) return null;
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">Charts</h3>
+      <h3 className="section-title">Charts</h3>
       {renderable.map((chart) => (
-        <div key={chart.id} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="mb-2 text-sm font-medium">{chart.title}</p>
-          <p className="mb-3 text-xs text-zinc-500">Supports finding {chart.finding_id}</p>
-          <div className="h-56 w-full">
+        <div key={chart.id} className="pt-2">
+          <p className="mb-1 text-sm font-medium tracking-tight">{chart.title}</p>
+          <p className="mb-3 text-xs text-[var(--label-secondary)]">
+            Supports finding {chart.finding_id}
+          </p>
+          <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               {chart.type === "line" ? (
                 <LineChart data={chart.data}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey={chart.x_key} tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <CartesianGrid stroke="var(--separator)" vertical={false} />
+                  <XAxis dataKey={chart.x_key} tick={tick} axisLine={false} tickLine={false} />
+                  <YAxis tick={tick} axisLine={false} tickLine={false} />
                   <Tooltip />
-                  <Line type="monotone" dataKey={chart.y_key} stroke="#4f46e5" strokeWidth={2} />
+                  <Line type="monotone" dataKey={chart.y_key} stroke={stroke} strokeWidth={2} dot={false} />
                 </LineChart>
               ) : chart.type === "area" ? (
                 <AreaChart data={chart.data}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey={chart.x_key} tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <CartesianGrid stroke="var(--separator)" vertical={false} />
+                  <XAxis dataKey={chart.x_key} tick={tick} axisLine={false} tickLine={false} />
+                  <YAxis tick={tick} axisLine={false} tickLine={false} />
                   <Tooltip />
-                  <Area type="monotone" dataKey={chart.y_key} fill="#c7d2fe" stroke="#4f46e5" />
+                  <Area type="monotone" dataKey={chart.y_key} fill={fill} stroke={stroke} />
                 </AreaChart>
               ) : (
                 <BarChart data={chart.data}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey={chart.x_key} tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <CartesianGrid stroke="var(--separator)" vertical={false} />
+                  <XAxis dataKey={chart.x_key} tick={tick} axisLine={false} tickLine={false} />
+                  <YAxis tick={tick} axisLine={false} tickLine={false} />
                   <Tooltip />
-                  <Bar dataKey={chart.y_key} fill="#4f46e5" />
+                  <Bar dataKey={chart.y_key} fill={stroke} radius={[6, 6, 0, 0]} />
                 </BarChart>
               )}
             </ResponsiveContainer>

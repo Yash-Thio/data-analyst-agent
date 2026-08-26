@@ -10,18 +10,15 @@ export function ReasoningTrace({ steps }: Props) {
   if (steps.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-      <h3 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-200">Reasoning trace</h3>
-      <ol className="relative space-y-0 border-l border-zinc-200 pl-4 dark:border-zinc-700">
-        {steps.map((step) => (
-          <li key={step.order} className="relative pb-4">
-            <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-indigo-500" />
-            <p className="text-xs font-mono text-indigo-600">{step.node}</p>
-            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">{step.description}</p>
-            <p className="text-xs text-zinc-500">{step.output_summary}</p>
-          </li>
-        ))}
-      </ol>
-    </div>
+    <ol className="relative space-y-0 border-l border-[var(--separator)] pl-4">
+      {steps.map((step) => (
+        <li key={step.order} className="relative pb-4 last:pb-0">
+          <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
+          <p className="font-mono text-xs text-[var(--accent)]">{step.node}</p>
+          <p className="text-sm font-medium tracking-tight">{step.description}</p>
+          <p className="text-xs text-[var(--label-secondary)]">{step.output_summary}</p>
+        </li>
+      ))}
+    </ol>
   );
 }

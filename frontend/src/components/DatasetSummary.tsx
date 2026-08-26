@@ -9,10 +9,10 @@ type Props = {
 };
 
 const ROLE_STYLES: Record<string, string> = {
-  measure: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
-  dimension: "bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300",
-  temporal: "bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-300",
-  identifier: "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  measure: "bg-[var(--success-fill)] text-[var(--success)]",
+  dimension: "bg-[var(--accent-fill)] text-[var(--accent)]",
+  temporal: "bg-[var(--warning-fill)] text-[var(--warning)]",
+  identifier: "bg-[var(--separator)] text-[var(--label-secondary)]",
 };
 
 function columnHint(column: ColumnProfile): string {
@@ -32,18 +32,18 @@ export function DatasetSummary({ filename, profile }: Props) {
   const visible = showAll ? profile.columns : profile.columns.slice(0, 14);
 
   return (
-    <div className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+    <div className="space-y-3">
       <div>
-        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{filename}</p>
-        <p className="text-xs text-zinc-500">
+        <p className="font-medium tracking-tight">{filename}</p>
+        <p className="text-xs text-[var(--label-secondary)]">
           {profile.row_count.toLocaleString()} rows · {profile.column_count} columns ·{" "}
           {profile.measures.length} measures · {profile.dimensions.length} dimensions
         </p>
       </div>
 
       {dateColumn && (
-        <p className="text-xs text-zinc-500">
-          Dates in <code className="font-mono text-zinc-700 dark:text-zinc-300">{dateColumn.name}</code>{" "}
+        <p className="text-xs text-[var(--label-secondary)]">
+          Dates in <code className="font-mono text-[var(--foreground)]">{dateColumn.name}</code>{" "}
           read as <code className="font-mono">{dateColumn.date_format}</code>
           {dateColumn.date_range?.min && (
             <>
@@ -55,19 +55,19 @@ export function DatasetSummary({ filename, profile }: Props) {
       )}
 
       {profile.layout === "wide" && profile.wide && (
-        <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+        <p className="banner banner-info text-xs">
           This file stores {profile.wide.value_columns.length} periods as separate columns. An
           unpivoted view (<code className="font-mono">{profile.long_table_name}</code>) was built so
           trends and comparisons over time can be queried.
         </p>
       )}
 
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-1.5">
         {visible.map((column) => (
           <span
             key={column.name}
             title={columnHint(column)}
-            className={`rounded px-2 py-0.5 text-xs ${ROLE_STYLES[column.role] ?? ROLE_STYLES.dimension}`}
+            className={`rounded-full px-2.5 py-0.5 text-xs ${ROLE_STYLES[column.role] ?? ROLE_STYLES.dimension}`}
           >
             {column.name}
           </span>
@@ -76,7 +76,7 @@ export function DatasetSummary({ filename, profile }: Props) {
           <button
             type="button"
             onClick={() => setShowAll(true)}
-            className="rounded px-2 py-0.5 text-xs text-indigo-600 hover:underline dark:text-indigo-400"
+            className="btn rounded-full px-2.5 py-0.5 text-xs text-[var(--accent)]"
           >
             +{profile.columns.length - visible.length} more
           </button>
@@ -85,10 +85,10 @@ export function DatasetSummary({ filename, profile }: Props) {
 
       {problems.length > 0 && (
         <details className="text-xs">
-          <summary className="cursor-pointer text-amber-700 dark:text-amber-400">
+          <summary className="cursor-pointer text-[var(--warning)]">
             {problems.length} data quality {problems.length === 1 ? "note" : "notes"}
           </summary>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-zinc-600 dark:text-zinc-400">
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--label-secondary)]">
             {problems.map((warning, i) => (
               <li key={i}>{warning.message}</li>
             ))}

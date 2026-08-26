@@ -6,9 +6,10 @@ import { uploadDataset } from "@/lib/api";
 
 type Props = {
   onUploaded: (datasetId: string, profile: DatasetProfile, filename: string) => void;
+  compact?: boolean;
 };
 
-export function FileUpload({ onUploaded }: Props) {
+export function FileUpload({ onUploaded, compact = false }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -27,11 +28,44 @@ export function FileUpload({ onUploaded }: Props) {
     }
   }
 
+  const fileInput = (
+    <input
+      ref={inputRef}
+      type="file"
+      accept=".csv"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        if (file) void handleFile(file);
+      }}
+    />
+  );
+
+  if (compact) {
+    return (
+      <div className="text-right">
+        <button
+          type="button"
+          disabled={loading}
+          className="btn btn-quiet text-xs"
+          onClick={() => inputRef.current?.click()}
+        >
+          {loading ? "Uploading…" : "Replace CSV"}
+        </button>
+        {fileInput}
+        {error && <p className="mt-1 text-xs text-[var(--danger)]">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`rounded-xl border-2 border-dashed p-8 text-center transition ${
-        dragging ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30" : "border-zinc-300 dark:border-zinc-700"
+      className={`drop-well flex w-full max-w-[560px] cursor-pointer flex-col items-center px-8 py-14 text-center ${
+        dragging ? "is-dragging" : ""
       }`}
+      onClick={() => {
+        if (!loading) inputRef.current?.click();
+      }}
       onDragOver={(e) => {
         e.preventDefault();
         setDragging(true);
@@ -44,27 +78,21 @@ export function FileUpload({ onUploaded }: Props) {
         if (file) void handleFile(file);
       }}
     >
-      <p className="text-lg font-medium text-zinc-800 dark:text-zinc-100">Upload a CSV dataset</p>
-      <p className="mt-1 text-sm text-zinc-500">Drag and drop, or click to browse</p>
+      <p className="text-lg font-medium tracking-tight">Upload a CSV dataset</p>
+      <p className="mt-1 text-sm text-[var(--label-secondary)]">Drag and drop, or click to browse</p>
       <button
         type="button"
         disabled={loading}
-        onClick={() => inputRef.current?.click()}
-        className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+        className="btn btn-primary mt-6"
+        onClick={(e) => {
+          e.stopPropagation();
+          inputRef.current?.click();
+        }}
       >
         {loading ? "Uploading…" : "Choose file"}
       </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".csv"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void handleFile(file);
-        }}
-      />
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {fileInput}
+      {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
     </div>
   );
 }
